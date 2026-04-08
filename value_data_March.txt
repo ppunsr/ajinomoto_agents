@@ -1,0 +1,14 @@
+Data extracted to value_data_March.json:
+{
+    "Month": "March",
+    "User_funnel": {
+        "Totalclick": 644,
+        "Register": 565,
+        "Player": 252
+    },
+    "User_Engagement": {
+        "Daily_active_user": 4,
+        "Monthly_active_user": 37,
+        "user_stickiness": 10.81081081081081
+    }
+}
