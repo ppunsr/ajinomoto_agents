@@ -214,26 +214,17 @@ def update_pptx(excel_path, template_path, output_path, month):
         content = re.sub(r'the decline in Monthly Active Users indicates a shrinking overall user base', f'the {mau_trend} in Monthly Active Users indicates {mau_context}', content)
         
         if 'Daily Active Users' in content:
-            import uuid
             idx = content.find('Daily Active Users')
             start_idx = content.rfind('<p:sp>', 0, idx)
             end_idx = content.find('</p:sp>', idx) + len('</p:sp>')
             orig_box = content[start_idx:end_idx]
             
-            # Create previous month box (Left side)
-            new_box = orig_box.replace('id="34"', 'id="1034"').replace('name="TextBox 33"', 'name="TextBox Prev"')
-            new_box = re.sub(r'<a:off x="[0-9]+"', f'<a:off x="5505638"', new_box)
-            new_box = re.sub(r'id="\{[A-F0-9\-]+\}"', f'id="{{{str(uuid.uuid4()).upper()}}}"', new_box)
-            new_box = new_box.replace('3.0</a:t>', f'{s["prev_dau"]:.1f}</a:t>')
-            new_box = new_box.replace('>21</a:t>', f'>{s["prev_mau"]}</a:t>')
-            new_box = new_box.replace('>14%</a:t>', f'>{s["prev_stickiness"]:.1f}%</a:t>')
-            
-            # Update target month box (Right side)
+            # Update target month box
             target_box = orig_box.replace('3.0</a:t>', f'{s["dau"]:.1f}</a:t>')
             target_box = target_box.replace('>21</a:t>', f'>{s["mau"]}</a:t>')
             target_box = target_box.replace('>14%</a:t>', f'>{s["stickiness"]:.1f}%</a:t>')
             
-            content = content[:start_idx] + new_box + target_box + content[end_idx:]
+            content = content[:start_idx] + target_box + content[end_idx:]
             
         content = re.sub(r'88% conversion rate', f'{s["conv_reg"]:.0f}% conversion rate', content)
         content = re.sub(r'55% drop off', f'{s["drop_off"]:.0f}% drop off', content)
