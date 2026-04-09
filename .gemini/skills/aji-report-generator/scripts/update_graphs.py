@@ -77,11 +77,11 @@ def sort_static_sheets(wb):
                 else:
                     break
             if data:
-                data.sort(key=lambda x: x[sort_col-1] if x[sort_col-1] is not None else 0, reverse=True)
+                data.sort(key=lambda x: x[sort_col-1] if x[sort_col-1] is not None else 0, reverse=False)
                 for i, row_data in enumerate(data):
                     for j, val in enumerate(row_data):
                         ws.cell(row=start_row + i, column=j + 1).value = val
-                print(f"Sorted sheet '{sheet_name}' DESC by column {sort_col}")
+                print(f"Sorted sheet '{sheet_name}' ASC by column {sort_col}")
 
 def update_graphs_zip(input_file, output_file, target_month):
     print(f"Reading target locations for '{target_month}' from {input_file}...")

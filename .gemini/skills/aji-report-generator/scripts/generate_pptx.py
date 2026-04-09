@@ -209,7 +209,7 @@ def update_pptx(excel_path, template_path, output_path, month):
                 content = re.sub(r'<c:val>.*?</c:val>', f'<c:val>{build_num_ref("state", "B", 12, 11+len(rows), [r[1] for r in rows])}</c:val>', content, flags=re.DOTALL)
                 
         elif 'menu!' in content:
-            rows = sorted(get_excel_data(wb, 'menu', 2, (1, 2)), key=lambda x: x[1] or 0, reverse=True)[:10]
+            rows = sorted(get_excel_data(wb, 'menu', 2, (1, 2)), key=lambda x: x[1] or 0, reverse=True)[::-1]
             if rows:
                 content = re.sub(r'<c:cat>.*?</c:cat>', f'<c:cat>{build_str_ref("menu", "A", 2, 1+len(rows), [r[0] for r in rows])}</c:cat>', content, flags=re.DOTALL)
                 content = re.sub(r'<c:val>.*?</c:val>', f'<c:val>{build_num_ref("menu", "B", 2, 1+len(rows), [r[1] for r in rows])}</c:val>', content, flags=re.DOTALL)
