@@ -59,37 +59,68 @@ def get_month_location(ws, target_month_str, include_previous=False):
                 
     return None
 
+def sort_static_sheets(wb):
+    sort_configs = {
+        'menu': {'sort_col': 2, 'start_row': 2},
+        'score': {'sort_col': 3, 'start_row': 2}
+    }
+    for sheet_name, cfg in sort_configs.items():
+        if sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            start_row = cfg['start_row']
+            sort_col = cfg['sort_col']
+            data = []
+            for r in range(start_row, ws.max_row + 1):
+                row_data = [ws.cell(row=r, column=c).value for c in range(1, ws.max_column + 1)]
+                if any(v is not None for v in row_data):
+                    data.append(row_data)
+                else:
+                    break
+            if data:
+                data.sort(key=lambda x: x[sort_col-1] if x[sort_col-1] is not None else 0, reverse=True)
+                for i, row_data in enumerate(data):
+                    for j, val in enumerate(row_data):
+                        ws.cell(row=start_row + i, column=j + 1).value = val
+                print(f"Sorted sheet '{sheet_name}' DESC by column {sort_col}")
+
 def update_graphs_zip(input_file, output_file, target_month):
     print(f"Reading target locations for '{target_month}' from {input_file}...")
     try:
-        wb = openpyxl.load_workbook(input_file, data_only=True)
+        wb = openpyxl.load_workbook(input_file)
     except Exception as e:
         print(f"Failed to open {input_file}: {e}")
         return
+
+    # Sort the static sheets and save to a temporary file
+    sort_static_sheets(wb)
+    temp_excel = "temp_sorted.xlsx"
+    wb.save(temp_excel)
+    
+    # Reload data-only to get correct rows
+    wb_data = openpyxl.load_workbook(temp_excel, data_only=True)
 
     sheets_of_interest = ['User_funnel', 'User Engagement', 'gameplay_report(score) ', 'gameplay_report(time) ']
     
     transforms = {}
     for sheet_name in sheets_of_interest:
-        if sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            include_prev = (sheet_name in ['User Engagement', 'gameplay_report(time) '])
+        if sheet_name in wb_data.sheetnames:
+            ws = wb_data[sheet_name]
+            include_prev = (sheet_name in ['User Engagement', 'gameplay_report(time) ', 'gameplay_report(score) '])
             loc = get_month_location(ws, target_month, include_previous=include_prev)
             if loc:
                 transforms[sheet_name] = loc
             else:
                 print(f"Sheet '{sheet_name}': Could not find data.")
                 
-    # Also find boundaries for static data sheets so they auto-resize to fit pasted data
     static_sheets = {
-        'state': {'start': 12, 'col': 1}, # checks column A from row 12 down
-        'menu': {'start': 2, 'col': 1},   # checks column A from row 2 down
-        'score': {'start': 2, 'col': 2}   # checks column B from row 2 down
+        'state': {'start': 12, 'col': 1},
+        'menu': {'start': 2, 'col': 1},
+        'score': {'start': 2, 'col': 2}
     }
     
     for sheet_name, cfg in static_sheets.items():
-        if sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
+        if sheet_name in wb_data.sheetnames:
+            ws = wb_data[sheet_name]
             start_row = cfg['start']
             col = cfg['col']
             end_row = start_row - 1
@@ -104,10 +135,11 @@ def update_graphs_zip(input_file, output_file, target_month):
                 transforms[sheet_name] = ('row', start_row, end_row)
                 print(f"Sheet '{sheet_name}': Automatically bound to rows {start_row} to {end_row}.")
     
-    wb.close()
+    wb_data.close()
     
     if not transforms:
         print("No ranges found to update. Exiting.")
+        os.remove(temp_excel)
         return
 
     temp_dir = 'temp_excel_unzip'
@@ -117,6 +149,27 @@ def update_graphs_zip(input_file, output_file, target_month):
     print(f"Unzipping {input_file} to modify chart XML directly (preserves all unsupported objects)...")
     with zipfile.ZipFile(input_file, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
+        
+    # Inject sorted sheetData from temp_excel into original XMLs
+    with zipfile.ZipFile(temp_excel, 'r') as z_sorted:
+        for sheet_idx, xml_path in [('6', 'xl/worksheets/sheet6.xml'), ('7', 'xl/worksheets/sheet7.xml')]:
+            try:
+                sorted_xml = z_sorted.read(xml_path).decode('utf-8')
+                sheet_data_match = re.search(r'<sheetData>.*?</sheetData>', sorted_xml, flags=re.DOTALL)
+                
+                if sheet_data_match:
+                    orig_path = os.path.join(temp_dir, xml_path)
+                    with open(orig_path, 'r', encoding='utf-8') as f:
+                        orig_xml = f.read()
+                        
+                    patched_xml = re.sub(r'<sheetData>.*?</sheetData>', sheet_data_match.group(0), orig_xml, flags=re.DOTALL)
+                    with open(orig_path, 'w', encoding='utf-8') as f:
+                        f.write(patched_xml)
+                    print(f"Injected sorted data into {xml_path}")
+            except Exception as e:
+                print(f"Failed to inject sorted data for {xml_path}: {e}")
+
+    os.remove(temp_excel)
 
     updated_files = 0
     
@@ -182,7 +235,15 @@ def update_graphs_zip(input_file, output_file, target_month):
                     return f"<{tag}:f>{new_ref}</{tag}:f>"
 
                 content = re.sub(r'<(c|cx):f>(.*?)</\1:f>', replace_c_f, content)
-                content = re.sub(r'<(c|cx):numCache>.*?</\1:numCache>', '', content, flags=re.DOTALL)
+                
+                def preserve_format(match):
+                    tag = match.group(1)
+                    format_code = re.search(f'<{tag}:formatCode>.*?</{tag}:formatCode>', match.group(0))
+                    if format_code:
+                        return f'<{tag}:numCache>{format_code.group(0)}</{tag}:numCache>'
+                    return ''
+                
+                content = re.sub(r'<(c|cx):numCache>.*?</\1:numCache>', preserve_format, content, flags=re.DOTALL)
                 content = re.sub(r'<(c|cx):strCache>.*?</\1:strCache>', '', content, flags=re.DOTALL)
                 
                 # Hardcode names for User Engagement legend

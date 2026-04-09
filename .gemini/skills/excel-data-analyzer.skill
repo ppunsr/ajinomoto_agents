@@ -1,0 +1,4 @@
+---
+name: excel-data-analyzer
+description: Analyzes Ajinomoto Game Excel reports and formats the metrics into a clear JSON structure to easily understand the data before building a PowerPoint.
+---

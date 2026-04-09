@@ -125,6 +125,48 @@ def analyze_data(excel_path, month_str):
 
 def update_pptx(excel_path, template_path, output_path, month):
     res = analyze_data(excel_path, month)
+    
+    import json
+    json_path = f"value_data_{month}.json"
+    if os.path.exists(json_path):
+        with open(json_path, 'r', encoding='utf-8') as jf:
+            jdata = json.load(jf)
+        
+        p3 = next((p for p in jdata.get("pages", []) if p["page_number"] == 3), None)
+        p4 = next((p for p in jdata.get("pages", []) if p["page_number"] == 4), None)
+        p5 = next((p for p in jdata.get("pages", []) if p["page_number"] == 5), None)
+
+        prev_m = None
+        curr_m = None
+        if p3:
+            ue_c = p3["sections"]["User Engagement"]["comparison"]
+            prev_m = ue_c["previous_month"]
+            curr_m = ue_c["current_month"]
+            
+            funnel_m = p3["sections"]["User Funnel"]["metrics"]
+            ue_m = p3["sections"]["User Engagement"]["metrics"]
+            
+            res['stats']['dau'] = float(ue_m["Daily Active Users (Avg.)"][curr_m])
+            res['stats']['prev_dau'] = float(ue_m["Daily Active Users (Avg.)"][prev_m])
+            res['stats']['mau'] = float(ue_m["Monthly Active Users"][curr_m])
+            res['stats']['prev_mau'] = float(ue_m["Monthly Active Users"][prev_m])
+            
+            res['stats']['stickiness'] = float(str(ue_m["User Stickiness"][curr_m]).replace('%', ''))
+            res['stats']['prev_stickiness'] = float(str(ue_m["User Stickiness"][prev_m]).replace('%', ''))
+            
+            res['stats']['conv_reg'] = float(str(funnel_m["Conversion rate"]).replace('%', ''))
+            res['stats']['drop_off'] = float(str(funnel_m["Drop off"]).replace('%', ''))
+            
+        if p4 and curr_m:
+            sc_m = p4["metrics"]["AVG Score per Day"]
+            res['stats']['avg_score'] = float(sc_m[curr_m])
+            res['stats']['score_change'] = float(str(sc_m["difference"]).replace('%', ''))
+            
+        if p5 and curr_m:
+            ti_m = p5["metrics"]["AVG Time per Day"]
+            res['stats']['avg_time'] = float(str(ti_m[curr_m]).replace(' minute', ''))
+            res['stats']['time_change'] = float(str(ti_m["difference"]).replace('%', ''))
+            
     wb = openpyxl.load_workbook(excel_path, data_only=True)
     temp_dir = 'temp_pptx_gen'
     if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
@@ -152,7 +194,7 @@ def update_pptx(excel_path, template_path, output_path, month):
         elif 'gameplay_report(score) ' in content and res['score']:
             s, e = res['score'][0]['row'], res['score'][-1]['row']
             content = re.sub(r'<c:cat>.*?</c:cat>', f'<c:cat>{build_num_ref("gameplay_report(score) ", "A", s, e, [r["date"] for r in res["score"]], "m/d/yy")}</c:cat>', content, flags=re.DOTALL)
-            content = re.sub(r'<c:val>.*?</c:val>', f'<c:val>{build_num_ref("gameplay_report(score) ", "B", s, e, [r["val"] for r in res["score"]], "0,\\\"K\\\"")}</c:val>', content, flags=re.DOTALL)
+            content = re.sub(r'<c:val>.*?</c:val>', f'<c:val>{build_num_ref("gameplay_report(score) ", "B", s, e, [r["val"] for r in res["score"]], '0,"k"')}</c:val>', content, flags=re.DOTALL)
             content = content.replace('<a:schemeClr val="lt1"/>', '<a:srgbClr val="C00000"/>').replace('<a:schemeClr val="dk1"/>', '<a:schemeClr val="bg1"/>')
             
         elif 'gameplay_report(time) ' in content and res['time']:
@@ -214,17 +256,27 @@ def update_pptx(excel_path, template_path, output_path, month):
         content = re.sub(r'the decline in Monthly Active Users indicates a shrinking overall user base', f'the {mau_trend} in Monthly Active Users indicates {mau_context}', content)
         
         if 'Daily Active Users' in content:
+            import uuid
             idx = content.find('Daily Active Users')
             start_idx = content.rfind('<p:sp>', 0, idx)
             end_idx = content.find('</p:sp>', idx) + len('</p:sp>')
             orig_box = content[start_idx:end_idx]
             
+            # Create previous month box (Left side, aligned exactly under the prev month header)
+            new_box = orig_box.replace('id="34"', 'id="1034"').replace('name="TextBox 33"', 'name="TextBox Prev"')
+            # 6590000 perfectly centers it under the February-2026 header at x=7076002
+            new_box = re.sub(r'<a:off x="([0-9]+)" y="([0-9]+)"', r'<a:off x="6590000" y="1840950"', new_box)
+            new_box = re.sub(r'id="\{[A-F0-9\-]+\}"', f'id="{{{str(uuid.uuid4()).upper()}}}"', new_box)
+            new_box = new_box.replace('3.0</a:t>', f'{s["prev_dau"]:.1f}</a:t>')
+            new_box = new_box.replace('>21</a:t>', f'>{s["prev_mau"]:.0f}</a:t>')
+            new_box = new_box.replace('>14%</a:t>', f'>{s["prev_stickiness"]:.2f}%</a:t>')
+            
             # Update target month box
             target_box = orig_box.replace('3.0</a:t>', f'{s["dau"]:.1f}</a:t>')
-            target_box = target_box.replace('>21</a:t>', f'>{s["mau"]}</a:t>')
-            target_box = target_box.replace('>14%</a:t>', f'>{s["stickiness"]:.1f}%</a:t>')
+            target_box = target_box.replace('>21</a:t>', f'>{s["mau"]:.0f}</a:t>')
+            target_box = target_box.replace('>14%</a:t>', f'>{s["stickiness"]:.2f}%</a:t>')
             
-            content = content[:start_idx] + target_box + content[end_idx:]
+            content = content[:start_idx] + new_box + target_box + content[end_idx:]
             
         content = re.sub(r'88% conversion rate', f'{s["conv_reg"]:.0f}% conversion rate', content)
         content = re.sub(r'55% drop off', f'{s["drop_off"]:.0f}% drop off', content)

@@ -1,13 +1,61 @@
 {
-    "Month": "Feb",
-    "User_funnel": {
-        "Totalclick": 572,
-        "Register": 510,
-        "Player": 230
-    },
-    "User_Engagement": {
-        "Daily_active_user": 4,
-        "Monthly_active_user": 37,
-        "user_stickiness": 10.81081081081081
-    }
+    "report_title": "February Report",
+    "pages": [
+        {
+            "page_number": 3,
+            "sections": {
+                "User Funnel": {
+                    "metrics": {
+                        "Total click": 572,
+                        "Register": 510,
+                        "Player": 230,
+                        "Conversion rate": "89.2%",
+                        "Drop off": "54.9%"
+                    }
+                },
+                "User Engagement": {
+                    "comparison": {
+                        "previous_month": "January",
+                        "current_month": "February"
+                    },
+                    "metrics": {
+                        "Daily Active Users (Avg.)": {
+                            "January": 5.6,
+                            "February": 4
+                        },
+                        "Monthly Active Users": {
+                            "January": 82,
+                            "February": 37
+                        },
+                        "User Stickiness": {
+                            "January": "6.83%",
+                            "February": "10.81%"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "page_number": 4,
+            "title": "Game Performance (Score)",
+            "metrics": {
+                "AVG Score per Day": {
+                    "January": 87248,
+                    "February": 28986,
+                    "difference": "-66.8%"
+                }
+            }
+        },
+        {
+            "page_number": 5,
+            "title": "Game Performance (Time)",
+            "metrics": {
+                "AVG Time per Day": {
+                    "January": "87 minute",
+                    "February": "32 minute",
+                    "difference": "-63.1%"
+                }
+            }
+        }
+    ]
 }
